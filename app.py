@@ -10,20 +10,25 @@ import sseclient
 class LLMChatHandler():
     def __init__(self, api_base_url: str):
         self.api_base_url = api_base_url
+        self.available_models = []
         print(f"VLLM API 서버 연결: {api_base_url}")
         
-        # API 서버 연결 확인
+        # API 서버 연결 확인 및 모델 목록 가져오기
         try:
             response = requests.get(f"{self.api_base_url}/ping")
             if response.status_code == 200:
-                models = response.json()
-                print(f"연결된 모델: {models}")
+                self.available_models = response.json()
+                print(f"연결된 모델: {self.available_models}")
             else:
                 print(f"API 서버 연결 실패: {response.status_code}")
         except Exception as e:
             print(f"API 서버 연결 오류: {str(e)}")
 
-    def generate_response(self, message, history):
+    def get_available_models(self):
+        """사용 가능한 모델 목록을 반환합니다."""
+        return self.available_models
+
+    def generate_response(self, message, history, selected_model=None):
         """VLLM API를 호출하여 응답을 생성합니다."""
         # 스트리밍 시작 시간 기록
         start_time = time.time()
@@ -43,7 +48,7 @@ class LLMChatHandler():
             "Content-Type": "application/json"
         }
         payload = {
-            "model": "Qwen/Qwen2.5-14B-Instruct",  # VLLM 서버에 로드된 모델
+            "model": selected_model if selected_model else self.available_models[0],  # 선택된 모델 또는 첫 번째 모델 사용
             "messages": messages,
             "temperature": 0.7,
             "top_p": 0.8,
@@ -117,13 +122,20 @@ def main(args):
     print(f"VLLM 서버에 연결 중: {args.api_base_url}")
     hdlr = LLMChatHandler(api_base_url=args.api_base_url)
 
-    with gr.Blocks(title=f"스터닝 박스", fill_height=True) as demo:
+    with gr.Blocks(title=f"LLM Chatbot", fill_height=True) as demo:
         gr.Markdown(
-            f"<h2>📦스터닝 박스📦</h2>"
+            f"<h2>📦LLM Chatbot📦</h2>"
         )
         
         # 상태 표시 추가
         status = gr.Markdown("✨ 준비 완료", elem_id="status")
+        
+        # 모델 선택 드롭다운 추가
+        model_dropdown = gr.Dropdown(
+            choices=hdlr.get_available_models(),
+            label="모델 선택",
+            value=hdlr.get_available_models()[0] if hdlr.get_available_models() else None
+        )
         
         # 메시지 형식 사용으로 경고 제거
         chatbot = gr.Chatbot(type='messages', scale=20, render_markdown=True)
@@ -152,7 +164,7 @@ def main(args):
             history.append({"role": "user", "content": message})
             return "", history, "⌛ 응답 생성 중..."
         
-        def bot_response(history, status_text=None):
+        def bot_response(history, status_text=None, selected_model=None):
             """봇 응답을 생성하는 함수"""
             if not history:
                 yield history, "✨ 준비 완료"
@@ -163,7 +175,7 @@ def main(args):
             history_so_far = history[:-1]
             
             # 응답 생성
-            for new_text in hdlr.generate_response(last_user_message, history_so_far):
+            for new_text in hdlr.generate_response(last_user_message, history_so_far, selected_model):
                 new_history = history.copy()
                 
                 # 스트리밍 중인지 완료된건지 확인
@@ -191,7 +203,7 @@ def main(args):
             queue=False
         ).then(
             bot_response,
-            [chatbot, status],
+            [chatbot, status, model_dropdown],
             [chatbot, status]
         )
         
@@ -202,7 +214,7 @@ def main(args):
             queue=False
         ).then(
             bot_response,
-            [chatbot, status],
+            [chatbot, status, model_dropdown],
             [chatbot, status]
         )
         
