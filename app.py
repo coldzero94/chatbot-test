@@ -8,8 +8,9 @@ import json
 import sseclient
 
 class LLMChatHandler():
-    def __init__(self, api_base_url: str):
+    def __init__(self, api_base_url: str, model: str):
         self.api_base_url = api_base_url
+        self.model = model
         self.available_models = []
         print(f"VLLM API 서버 연결: {api_base_url}")
         
@@ -48,7 +49,7 @@ class LLMChatHandler():
             "Content-Type": "application/json"
         }
         payload = {
-            "model": selected_model if selected_model else self.available_models[0],  # 선택된 모델 또는 첫 번째 모델 사용
+            "model": selected_model if selected_model else self.model,  # 선택된 모델 또는 지정된 모델 사용
             "messages": messages,
             "temperature": 0.7,
             "top_p": 0.8,
@@ -120,7 +121,7 @@ class LLMChatHandler():
 
 def main(args):
     print(f"VLLM 서버에 연결 중: {args.api_base_url}")
-    hdlr = LLMChatHandler(api_base_url=args.api_base_url)
+    hdlr = LLMChatHandler(api_base_url=args.api_base_url, model=args.model)
 
     with gr.Blocks(title=f"LLM Chatbot", fill_height=True) as demo:
         gr.Markdown(
@@ -229,6 +230,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--api-base-url", default="http://localhost:7000", help="VLLM 서버 API URL")
     parser.add_argument("--port", default=8000, type=int, help="Gradio 앱 포트 번호")
+    parser.add_argument("--model", required=True, help="사용할 모델 이름 (예: Qwen/Qwen2.5-14B-Instruct)")
     args = parser.parse_args()
 
     main(args) 
